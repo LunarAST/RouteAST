@@ -1,0 +1,7 @@
+# CODEOWNERS - RouteAST Sub-Protocol Governance
+
+# Specification Document
+README.md @LunarAST/spec-core
+
+# JSON Schemas
+schemas/ @LunarAST/spec-core
