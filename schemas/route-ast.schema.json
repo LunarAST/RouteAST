@@ -1,1 +1,59 @@
-[todo]
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/LunarAST/RouteAST/main/schemas/route-ast.schema.json",
+  "title": "RouteAST Base IR Schema",
+  "description": "Canonical JSON Schema for a single RouteAST interface object.",
+  "type": "object",
+  "required": ["method", "segments"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "description": "Uppercase HTTP method as per RFC 7231 section 4.3. gRPC interfaces are uniformly mapped to POST.",
+      "pattern": "^[A-Z]+$"
+    },
+    "segments": {
+      "type": "array",
+      "description": "Ordered array of route segments.",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["type", "value"],
+            "properties": {
+              "type": { "const": "literal" },
+              "value": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type", "name"],
+            "properties": {
+              "type": { "const": "parameter" },
+              "name": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" },
+              "rawConstraint": { "type": "string" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "const": "wildcard" }
+            }
+          }
+        ]
+      }
+    },
+    "sourceFile": {
+      "type": "string",
+      "description": "Relative source file path from project root."
+    },
+    "lineNumber": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "extractionMethod": {
+      "type": "string",
+      "enum": ["ast", "escapeHatch", "openapi", "manual"]
+    }
+  }
+}
