@@ -1,1 +1,117 @@
-[todo]
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/LunarAST/RouteAST/main/schemas/route-map.schema.json",
+  "title": "RouteAST Alignment Map Schema",
+  "description": "Canonical JSON Schema for the RouteAST alignment topology (lunar-map.json).",
+  "type": "object",
+  "required": ["version", "projects", "alignments"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "sha", "interfaces", "scanStatus"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["service", "client", "mixed"] },
+          "sha": { "type": "string" },
+          "scanStatus": { "type": "string", "enum": ["success", "failed", "stale"] },
+          "interfaces": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["exposed", "consumed"],
+                "properties": {
+                  "exposed": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/interfaceEntry"
+                    }
+                  },
+                  "consumed": {
+                    "type": "array",
+                    "items": {
+                      "allOf": [
+                        { "$ref": "#/definitions/interfaceEntry" },
+                        {
+                          "type": "object",
+                          "required": ["targetProject"],
+                          "properties": {
+                            "targetProject": { "type": "string" }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    "alignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["clientProject", "serverProject", "path", "method", "status"],
+        "properties": {
+          "clientProject": { "type": "string" },
+          "serverProject": { "type": "string" },
+          "path": { "type": "string" },
+          "method": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["Aligned", "ParamNameMismatch", "Unused", "Orphaned", "MethodMismatch", "Unverified"]
+          },
+          "warning": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "interfaceEntry": {
+      "type": "object",
+      "required": ["path", "method"],
+      "properties": {
+        "path": { "type": "string" },
+        "method": { "type": "string" },
+        "segments": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                  "type": { "const": "literal" },
+                  "value": { "type": "string" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "name"],
+                "properties": {
+                  "type": { "const": "parameter" },
+                  "name": { "type": "string" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": { "const": "wildcard" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
