@@ -195,3 +195,48 @@ The exit code is determined solely by blocking anomalies (`Unverified`, `MethodM
 ---
 
 *"Contract supremacy, not a fraction off. Let multi-language routing dialects converge here, achieving zero-intrusion, deterministic network alignment."*
+
+---
+
+## Appendix D: Port Indicator Design Language
+
+This appendix defines the visual encoding of network interface ports (endpoints) in any LunarAST-compatible visualization. It is a normative reference for all present and future renderers (including `lunar-scope`).
+
+### D.1 Encoding Layers
+
+Every port indicator follows a three-layer visual encoding, fully decoupled via CSS custom properties in `lunar-scope`, and adaptable to other renderers via equivalent mechanisms.
+
+| Layer | CSS Property | Rule |
+|:---|:---|:---|
+| **Fill** | `background` | Solid method color if aligned; theme canvas color if unused or orphaned, creating a hollow appearance. |
+| **Border** | `border` | Always the method color, preserving HTTP verb identity (GET green, POST blue, DELETE red, etc.). |
+| **Outer Glow** | `boxShadow` | None if aligned; red glow (`#EF4444`) if unused; yellow glow (`#F59E0B`) if orphaned. |
+| **Shape** | `borderRadius` | Circle for all exposed ports and aligned consumed ports; diamond (30% border-radius) for orphaned consumed ports. |
+
+### D.2 Status Mapping
+
+| Status | Fill | Border Color | Outer Glow | Shape (Exposed) | Shape (Consumed) |
+|:---|:---|:---|:---|:---|:---|
+| `aligned` | Solid method color | Method color | None | Circle | Circle |
+| `unused` | Hollow (canvas bg) | Method color | Red (`#EF4444`) | Circle | N/A |
+| `orphaned` | Hollow (canvas bg) | Method color | Yellow (`#F59E0B`) | N/A | Diamond |
+| `mismatch` | Solid method color | Method color | Red (`#EF4444`) | Circle | Circle |
+| `unverified` | Hollow (canvas bg) | Gray (`#6B7280`) | None | Circle | Circle |
+
+### D.3 Method Color Reference
+
+| HTTP Method | Color | Hex |
+|:---|:---|:---|
+| GET | Emerald Green | `#10B981` |
+| POST | Ocean Blue | `#3B82F6` |
+| PUT | Amber | `#F59E0B` |
+| PATCH | Violet | `#8B5CF6` |
+| DELETE | Coral Red | `#EF4444` |
+| HEAD | Cyan | `#06B6D4` |
+| OPTIONS | Slate Gray | `#64748B` |
+
+### D.4 Implementation Guidance
+
+1. All color values should reference CSS custom properties (e.g., `var(--lunar-method-get-text)`) rather than hardcoded hex values, enabling full theme customization without code changes.
+2. The rendering logic for port indicators should be centralized in a single module (e.g., `lunar-scope/src/portStyles.ts`) and shared between node handles and info card indicators, ensuring visual consistency.
+3. Future renderers for other platforms (e.g., CLI terminal output, IDE plugins, SVG export) should map these same semantic layers to their native rendering primitives while preserving the status → visual mapping defined above.
