@@ -1,46 +1,43 @@
-# LunarAST Sub-Protocol: RouteAST Synchronous Network and Routing Contract Specification
-
-**——Static Extraction, Normalization, and Alignment Algorithm Specification for Multi-Language Web Routing and HTTP/gRPC Endpoints**
+# LunarAST Sub-Protocol: RouteAST — Network & Routing Contract Specification
+## Specification for Static Extraction, Normalization and Alignment Algorithms for Multi-Language Web Routes & HTTP/gRPC Endpoints
 
 **Version**: 0.6.0 — Official Release
 **Last Updated**: 2026-06-08
-**Mother Specification**: LunarAST Ecosystem Mother Specification v1.5 (Final Closed-Loop Edition)
+**Parent Specification**: LunarAST Ecosystem Core Spec v1.5 (Final Closed Version)
 
 ---
 
-## 1. Purpose and Physical Boundaries
+## 1. Purpose & Physical Boundaries
+This is the first domain-specific sub-protocol in the LunarAST protocol suite. It defines the standard format for static description of network interfaces (REST API, gRPC, Nginx forwarding rules), specifications for project-level physical fact cache (`actual.json`), and alignment validation algorithms.
 
-This specification is the first sub-domain contract specification of the `LunarAST` protocol family, defining the static description format for synchronous network interfaces (REST API, gRPC, Nginx forwarding rules), the project-level physical fact cache (`actual.json`) output specification, and the alignment verification algorithm.
-
-### 1.1 Terminology and Naming Conventions
-*   **Unified Naming**: Full compliance with Google Naming & Style Guides. Property key names use `camelCase`; executable binaries and public configuration file names use `kebab-case`.
-*   **File Path**: Strictly adheres to **`.lunar/interfaces.yml`** as defined by the mother specification.
-*   **Method Constraints**: The `method` property value is forcibly uppercase, following RFC 7231, with support for common extension methods (e.g., `PROPFIND`).
-*   **gRPC Mapping Standard**: gRPC interfaces are uniformly treated as the `POST` method. Their full path (e.g., `/grpc.health.v1.Health/Check`) must first have leading and trailing slashes stripped, then be split by `/` into all-literal segments (e.g., `["grpc.health.v1.Health", "Check"]`), physically preventing empty literal segments at the head that could cause index out-of-bounds and parsing errors.
+### 1.1 Terminology & Naming Conventions
+*   **General Naming Rules**: Fully follow the Google Naming & Style Guides. Use `camelCase` for property keys, and `kebab-case` for executable binaries and public configuration files.
+*   **File Path**: Strictly follow the path defined in the parent spec: **`.lunar/interfaces.yml`**.
+*   **HTTP Method Constraints**: The `method` field **must be uppercase** per RFC 7231. Extended HTTP methods (e.g. `PROPFIND`) are also supported.
+*   **gRPC Mapping Rule**: All gRPC calls are uniformly treated as `POST`. Trim leading and trailing slashes from the full path, then split into pure literal segments. Empty literal segments are prohibited.
 *   **`extractionMethod` Enumeration**:
-    *   `"ast"`: Automatically extracted via syntax tree analysis.
-    *   `"escapeHatch"`: Extracted via single-line directive comments like `// lunar:consume`.
-    *   `"openapi"`: Parsed from project OpenAPI contract declaration files.
-    *   `"manual"`: Manually declared in `interfaces.yml`.
-*   **No Automatic HEAD Mapping**: The `HEAD` method and `GET` must be explicitly declared separately.
+    *   `"ast"`: Extracted automatically via Abstract Syntax Tree parsing.
+    *   `"escapeHatch"`: Extracted via inline escape-hatch comments.
+    *   `"openapi"`: Parsed from OpenAPI documents.
+    *   `"manual"`: Manually declared by developers.
+*   **No Automatic HEAD Mapping**: `HEAD` and `GET` methods must be explicitly defined separately.
+*   **Universal Path Splitting Rule**: When splitting raw path strings into route segment arrays, **all adapters MUST first trim leading and trailing slashes**. Split the remaining string by `/`. This rule eliminates empty literal segments at the start or end of paths, which cause index out-of-bounds errors, parsing failures and alignment deviation. This rule applies to all HTTP paths including REST, gRPC and Nginx forwarding rules.
 
-### 1.2 Responsibility Boundaries (What It Does Not Do)
-*   Does not parse business logic; does not track middleware logic; does not perform cross-function data-flow analysis.
-*   Operates only during the CI build phase; does not provide runtime traffic gateway interception or dynamic matching.
+### 1.2 Scope & Limitations (What This Spec Does NOT Do)
+*   Does not parse business logic, track middleware, or perform data flow analysis.
+*   Only runs during CI build phase; no runtime traffic interception is provided.
 
 ---
 
-## 2. Data Structure Specification (Base IR Schemas)
+## 2. Base IR Schemas (Data Structure Specifications)
 
-### 2.1 RouteSegment Strongly Typed Definition
-
+### 2.1 Strongly Typed Definition for RouteSegment
 *   **`literal`**: `type: "literal"`, `value: String` (non-empty)
-*   **`parameter`**: `type: "parameter"`, `name: String`, `rawConstraint: Option<String>` (empty string normalized to `None`; `name` should only contain alphanumeric characters and underscores)
-*   **`wildcard`**: `type: "wildcard"`; `value` and `name` are forcibly ignored during normalization
+*   **`parameter`**: `type: "parameter"`, `name: String`, `rawConstraint: Option<String>` (empty string normalized to `None`; `name` only contains letters, digits and underscores)
+*   **`wildcard`**: `type: "wildcard"`. The `value` and `name` fields are ignored.
 
-### 2.2 Complete JSON Representation of a Single Route Contract (RouteAST)
-
-Metadata fields are flattened at the same level as routing properties; **nesting wrapper objects is strictly forbidden**:
+### 2.2 Full JSON Schema for Single RouteAST Contract
+Metadata fields and route attributes are flattened at the same level. **Nested wrapper objects are strictly prohibited**.
 
 ```json
 {
@@ -63,23 +60,21 @@ Metadata fields are flattened at the same level as routing properties; **nesting
 
 ---
 
-## 3. Adapter Extraction and Stdout Communication Specification
+## 3. Adapter Extraction & Stdout Communication Specification
 
 ### 3.1 Line-Delimited JSON (LDJSON) Output Stream Format
-
-*   **Streaming Output**: Upon extracting and structuring each route, it must be immediately written to `stdout` and `flush`ed; accumulating the entire dataset in memory is strictly forbidden.
-*   **Atomicity Verification**: The final line must be the marker `{"_lunar": {"status": "success", "count": N}}`. The control layer verifies that the actual number of parsed lines equals `count`; if they mismatch, it triggers `ERR_LUNAR_ADAPTER_CRASH` and discards all output from this round.
-*   **Error Handling**: If the adapter encounters an unrecoverable error, it should output `{"_lunar":{"status":"error","message":"..."}}` and exit with a non-zero exit code.
-*   **Log Isolation**: Unstructured logs are redirected to `stderr`.
-*   **Process Timeout Circuit Breaker**: A default 30-second execution limit is set for each adapter process; upon timeout, it is forcibly killed.
+*   **Stream Output**: Flush and output one line of JSON immediately after extracting each route. In-memory accumulation is forbidden.
+*   **Atomic Validation**: The last line of output **must** be `{"_lunar": {"status": "success", "count": N}}`. The controller verifies that the count value matches the total number of JSON lines. A mismatch triggers the error `ERR_LUNAR_ADAPTER_CRASH`.
+*   **Error Handling**: On unrecoverable errors, output `{"_lunar":{"status":"error","message":"..."}}` and exit with a non-zero exit code.
+*   **Log Isolation**: Unstructured logs must be redirected to `stderr`.
+*   **Process Timeout & Circuit Break**: Default timeout is 30 seconds. The process will be forcibly terminated once timed out.
 
 ---
 
-## 4. Confirmation Layer: Semantic Normalization Rules
+## 4. Normalization Layer: Semantic Normalization Rules
+The normalization engine unifies framework-specific syntax variations into standard `RouteSegment` structures, and converts all HTTP `method` values to uppercase.
 
-The confirmation engine forcibly converts the dialect features of multi-language frameworks into the standard `RouteSegment` representation, and uniformly converts the `method` field to uppercase.
-
-| Framework | Original Route | Normalized segments |
+| Framework | Raw Route | Normalized Segments |
 |:---|:---|:---|
 | Express | `/api/:id(\\d+)` | `Literal("api")` `Parameter { name: "id", rawConstraint: "\\d+" }` |
 | FastAPI | `/api/{id:int}` | `Literal("api")` `Parameter { name: "id", rawConstraint: "int" }` |
@@ -87,43 +82,39 @@ The confirmation engine forcibly converts the dialect features of multi-language
 | Gin | `/api/*filepath` | `Literal("api")` `Wildcard` |
 | gRPC | `/grpc.health.v1.Health/Check` | `[Literal("grpc.health.v1.Health"), Literal("Check")]` |
 
-The confirmation engine persists this normalized data to `.lunar/.interfaces-autogen.json`.
+Normalized data will be persisted to `.lunar/.interfaces-autogen.json`.
 
 ---
 
-## 5. Alignment Layer: Multi-Dimensional Comparison and Short-Circuit Alignment Algorithm
+## 5. Alignment Layer: Multi-Dimensional Comparison & Short-Circuit Alignment Algorithm
 
-### 5.1 Position-based & Ordinal Alignment Algorithm
-
-1.  **Path Length Alignment**: Unless the provider's end is a `wildcard`, the `segments` lengths of both sides must be equal.
-2.  **Position-by-Position Scanning** (using the provider as the baseline):
-    *   Both `literal`: `value` must be exactly equal.
-    *   Provider `parameter`, consumer `literal`: **Match succeeded**; attach `warning: "Heuristic Match"` and bypass parameter name comparison.
-    *   Provider `literal`, consumer `parameter`: **No match**.
-    *   Both `parameter`: **Aligned successfully**; subsequent parameter name comparison applies.
-    *   Provider `wildcard`: **Immediately terminate position-by-position scanning**, match succeeds, consuming all remaining segments from the consumer.
-    *   Non-final `wildcard`: Requires the consumer to also have a `wildcard` at the same position; otherwise, no match.
+### 5.1 Position-Based & Ordinal Alignment Algorithm
+1.  **Path Length Check**: Unless the last segment is a `wildcard`, the two `segments` arrays must have identical length.
+2.  **Segment-by-Segment Scan (based on provider side)**:
+    *   Both segments are `literal`: The `value` fields must be exactly equal.
+    *   Provider: `parameter`, Consumer: `literal`: **Match succeeded**. Add warning: `"Heuristic Match"`. Parameter name comparison is skipped.
+    *   Provider: `literal`, Consumer: `parameter`: **Match failed**.
+    *   Both segments are `parameter`: **Alignment succeeded**. Proceed to compare parameter names.
+    *   Provider: `wildcard`: **Terminate segment scan immediately**. Match succeeded; all remaining segments on the consumer side are fully matched.
+    *   Non-trailing `wildcard`: The consumer segment at the same position must also be `wildcard`, otherwise the match fails.
 
 ### 5.2 Contract Status Short-Circuit Evaluation Algorithm
-
 **Priority Chain**: `Unverified > MethodMismatch > Orphaned > (ParamNameMismatch or Aligned)`
 
-`Unused` is generated by the global post-processor and is not in this chain.
+The `Unused` status is generated by the global post-processor and excluded from this priority chain.
 
-### 5.3 `get_aligned_parameter_names` Semantic Definition
+### 5.3 Semantic Definition of `get_aligned_parameter_names`
+Compare the `segments` array of the current route against the peer route. Collect the `name` field of segments **only when both routes have a `parameter` type at the same index**. Since path structure is already validated by segment scanning, the two resulting parameter name lists have identical length and one-to-one correspondence.
 
-Iterates segment-by-segment comparing the `segments` arrays of `self` and `other`. **Only when both routes are of `parameter` type at the same index position** is the `name` attribute of the segment at that position collected into the result list. Because the path structure has been guaranteed consistent through position-by-position comparison, the collected parameter name lists from both sides are necessarily equal in length and correspond one-to-one.
-
-### 5.4 Contract Status Enumeration
-
+### 5.4 Alignment Status Enumeration
 ```rust
 pub enum AlignmentStatus {
     Unverified,
     MethodMismatch { client_method: String, server_method: String },
     Orphaned,
-    ParamNameMismatch { client_names: Vec<String>, server_names: Vec<String> }, // Non-blocking
+    ParamNameMismatch { client_names: Vec<String>, server_names: Vec<String> }, // Non-blocking issue
     Aligned,
-    // Unused is generated by the global post-processor
+    // Unused status is generated by global post-processor
 }
 ```
 
@@ -141,7 +132,7 @@ Example 1 (Heuristic Match):
 }
 ```
 
-Example 2 (Parameter Name Difference):
+Example 2 (Parameter Name Mismatch):
 ```json
 {
   "clientProject": "myPaymentService",
@@ -154,89 +145,43 @@ Example 2 (Parameter Name Difference):
 
 ---
 
-## 6. Single-Project Physical Fact Manifest (`actual.json`) Output Specification
+## 6. Single Project Physical Fact Manifest (`actual.json`) Specification
 
-### 6.1 `route-ast-actual.json` Complete Schema
+### 6.1 Full Schema for `route-ast-actual.json`
+Elements inside `exposed` and `consumed` arrays **must** contain these fields: `path`, `method`, `segments`, `sourceFile`, `lineNumber`, `extractionMethod`.
 
-Elements in the `exposed` and `consumed` arrays must include `path`, `method`, `segments`, `sourceFile`, `lineNumber`, `extractionMethod`. The `targetProject` in `consumed` is required; if it cannot be determined, fill with `"unknown"`. During central confluence, such entries are ignored for alignment but retained in `lunar-map.json` for frontend indication.
+The `targetProject` field in `consumed` entries is required. Fill in `"unknown"` if the target project cannot be determined. Entries marked as `unknown` will be ignored during global aggregation, but retained in `lunar-map.json` for frontend visualization.
 
 ---
 
 ## 7. Diagnostic Command Behavior Specification
 
-### 7.1 `lunar doctor` Exit Code Rules
-
-The exit code is determined solely by blocking anomalies (`Unverified`, `MethodMismatch`, `Orphaned`). `ParamNameMismatch` and `Aligned` do not affect the exit code and are output only as diagnostic information.
+### 7.1 Exit Code Rules for `lunar doctor`
+Exit codes are determined **only by blocking issues**: `Unverified`, `MethodMismatch`, `Orphaned`.
+`ParamNameMismatch` and `Aligned` do not affect exit codes; they are only printed as diagnostic information.
 
 ---
 
-## 8. Future Version Planning
-
-*   **v1.0**: Introduce semantic normalization of `rawConstraint` regexes.
-*   Continuously track RFC extensions to maintain full coverage of standard HTTP methods.
+## 8. Future Roadmap
+*   **v1.0**: Introduce normalization logic for regular expressions inside `rawConstraint`.
+*   Continuously track RFC updates to maintain full compatibility with standard HTTP methods.
 
 ---
 
 ## Appendix A: Implementation Checklist (SOP)
-
-- [ ] Adapter outputs LDJSON stream, includes end marker, and performs atomic count strict equality verification with actual streamed lines.
-- [ ] Adapter strips leading and trailing slashes first when extracting gRPC paths to prevent empty literal segments at the head.
-- [ ] Empty string `rawConstraint` normalized to `None` (`null`).
-- [ ] Confirmation engine uniformly converts `method` to uppercase.
-- [ ] On provider `wildcard` match, immediately stop scanning and consume remaining segments.
-- [ ] Alignment engine uses `get_aligned_parameter_names` to precisely filter asymmetric parameter slots during `ParamNameMismatch` evaluation; unit tests cover heuristic match scenarios.
-- [ ] `ParamNameMismatch` and `Aligned` are both treated as success states in CI, never blocking builds, only used for visualization and `lunar diff` display.
-- [ ] Failure/stale guard returns `Unverified` first, implementing complete failure isolation.
-- [ ] Project-level configuration file extension strictly uses `.yml`.
-- [ ] Adapter supports outputting `error` status end marker.
-- [ ] Entries with `targetProject` as `"unknown"` are ignored during confluence but retained and marked in `lunar-map.json`.
-- [ ] `lunar doctor` exit code determined only by `Unverified`, `MethodMismatch`, `Orphaned`.
-
----
-
-*"Contract supremacy, not a fraction off. Let multi-language routing dialects converge here, achieving zero-intrusion, deterministic network alignment."*
+- [ ] Adapter outputs LDJSON stream with final status marker and strict count validation for atomicity.
+- [ ] Trim leading and trailing slashes for all raw paths before parsing; eliminate empty leading literal segments.
+- [ ] Normalize empty `rawConstraint` string value to `None`.
+- [ ] Normalize all HTTP `method` values to uppercase in normalization engine.
+- [ ] Terminate segment scan immediately and match all remaining segments when a `wildcard` is detected on the provider side.
+- [ ] Implement `get_aligned_parameter_names` in alignment engine for precise filtering of asymmetric parameter segments; add unit tests covering heuristic match scenarios.
+- [ ] Treat `ParamNameMismatch` and `Aligned` as successful states in CI pipelines; do not block builds. Reserve them for visualization and `lunar diff` reports.
+- [ ] Return `Unverified` for failed or stale pre-checks; implement complete failure isolation.
+- [ ] Use `.yml` as the file extension for all project-level configuration files.
+- [ ] Adapter supports outputting error status marker on failure.
+- [ ] Keep entries with `targetProject: "unknown"` during aggregation; mark them on frontend while excluding from alignment logic.
+- [ ] Restrict exit codes of `lunar doctor` to `Unverified`, `MethodMismatch` and `Orphaned` only.
 
 ---
 
-## Appendix D: Port Indicator Design Language
-
-This appendix defines the visual encoding of network interface ports (endpoints) in any LunarAST-compatible visualization. It is a normative reference for all present and future renderers (including `lunar-scope`).
-
-### D.1 Encoding Layers
-
-Every port indicator follows a three-layer visual encoding, fully decoupled via CSS custom properties in `lunar-scope`, and adaptable to other renderers via equivalent mechanisms.
-
-| Layer | CSS Property | Rule |
-|:---|:---|:---|
-| **Fill** | `background` | Solid method color if aligned; theme canvas color if unused or orphaned, creating a hollow appearance. |
-| **Border** | `border` | Always the method color, preserving HTTP verb identity (GET green, POST blue, DELETE red, etc.). |
-| **Outer Glow** | `boxShadow` | None if aligned; red glow (`#EF4444`) if unused; yellow glow (`#F59E0B`) if orphaned. |
-| **Shape** | `borderRadius` | Circle for all exposed ports and aligned consumed ports; diamond (30% border-radius) for orphaned consumed ports. |
-
-### D.2 Status Mapping
-
-| Status | Fill | Border Color | Outer Glow | Shape (Exposed) | Shape (Consumed) |
-|:---|:---|:---|:---|:---|:---|
-| `aligned` | Solid method color | Method color | None | Circle | Circle |
-| `unused` | Hollow (canvas bg) | Method color | Red (`#EF4444`) | Circle | N/A |
-| `orphaned` | Hollow (canvas bg) | Method color | Yellow (`#F59E0B`) | N/A | Diamond |
-| `mismatch` | Solid method color | Method color | Red (`#EF4444`) | Circle | Circle |
-| `unverified` | Hollow (canvas bg) | Gray (`#6B7280`) | None | Circle | Circle |
-
-### D.3 Method Color Reference
-
-| HTTP Method | Color | Hex |
-|:---|:---|:---|
-| GET | Emerald Green | `#10B981` |
-| POST | Ocean Blue | `#3B82F6` |
-| PUT | Amber | `#F59E0B` |
-| PATCH | Violet | `#8B5CF6` |
-| DELETE | Coral Red | `#EF4444` |
-| HEAD | Cyan | `#06B6D4` |
-| OPTIONS | Slate Gray | `#64748B` |
-
-### D.4 Implementation Guidance
-
-1. All color values should reference CSS custom properties (e.g., `var(--lunar-method-get-text)`) rather than hardcoded hex values, enabling full theme customization without code changes.
-2. The rendering logic for port indicators should be centralized in a single module (e.g., `lunar-scope/src/portStyles.ts`) and shared between node handles and info card indicators, ensuring visual consistency.
-3. Future renderers for other platforms (e.g., CLI terminal output, IDE plugins, SVG export) should map these same semantic layers to their native rendering primitives while preserving the status → visual mapping defined above.
+> *"Contracts come first, with zero tolerance for deviation. Unify routing dialects across multiple languages, and achieve non-intrusive, deterministic network alignment."*
